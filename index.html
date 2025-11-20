@@ -1,1 +1,489 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>UANG KAS PAUD ZIDNA ILMAN</title>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root{
+      --bg:#0b1220; --card:#0f1726; --text:#e6eef8; --muted:#9aa4b2; --accent:#6c5ce7;
+      --success:#16a34a; --danger:#dc2626; --glass: rgba(255,255,255,0.03);
+      --soft1:#fff8f0; --soft2:#f0f6ff; --soft-bg:#f7fafc; --soft-card:#ffffff;
+    }
+    /* Light theme overrides */
+    :root.light{
+      --bg: #f4f7fb; --card: #ffffff; --text: #0f1724; --muted:#5b6773; --accent:#4f46e5; --glass: rgba(2,6,23,0.03);
+    }
+    /* Soft theme overrides (aesthetic pastel) */
+    :root.soft{
+      --bg: linear-gradient(180deg,#fff7ed,#f0f9ff); --card: #ffffffaa; --text:#102a43; --muted:#475569; --accent:#f97316;
+    }
+
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+    .wrap{max-width:1200px;margin:28px auto;padding:20px}
+    .top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+    h1{margin:0;font-size:20px}
+    .muted{color:var(--muted);font-size:13px}
+    .card{background:var(--card);border-radius:12px;padding:14px;box-shadow:0 8px 24px rgba(2,6,23,0.45);backdrop-filter: blur(6px)}
+    .row{display:flex;gap:16px}
+    .col{flex:1}
+    .aside{width:380px}
+    .btn{background:var(--accent);color:white;border:none;padding:8px 12px;border-radius:8px;cursor:pointer}
+    .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06)}
+    .btn.warn{background:var(--danger)}
+    .input{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(0,0,0,0.06);background:transparent;color:inherit}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px;text-align:left;border-bottom:1px solid rgba(255,255,255,0.03)}
+    .small{font-size:13px}
+    .flex{display:flex;align-items:center;gap:8px}
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+    .list{max-height:360px;overflow:auto;margin-top:8px}
+    .center{text-align:center}
+    .pill{padding:6px 8px;border-radius:999px;background:var(--glass);font-size:13px}
+    .kpi{display:flex;gap:12px}
+    .kcard{flex:1;padding:12px;border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent)}
+    .muted-2{color:var(--muted)}
+    footer{margin-top:18px;text-align:center;color:var(--muted);font-size:13px}
+
+    /* responsive */
+    @media (max-width:1000px){
+      .row{flex-direction:column}
+      .aside{width:100%}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1>PAUD ZIDNA ILMAN</h1>
+        <div class="muted">UANG KAS MURID PAUD ZIDNA ILMAN</div>
+      </div>
+      <div class="flex">
+        <div class="controls">
+          <select id="themeSelect" class="input small">
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+            <option value="soft">Soft</option>
+          </select>
+          <button class="btn" id="btnAddMemberTop">Tambah Anggota</button>
+          <button class="btn ghost" id="btnExport">Export CSV</button>
+          <button class="btn ghost" id="btnImport">Import CSV</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <strong>Dashboard</strong>
+              <div class="muted">Ringkasan kas & anggota</div>
+            </div>
+            <div class="kpi">
+              <div class="kcard">
+                <div class="muted-2 small">Total Anggota</div>
+                <div id="kCount" style="font-weight:700;font-size:18px">0</div>
+              </div>
+              <div class="kcard">
+                <div class="muted-2 small">Total Saldo</div>
+                <div id="kTotal" style="font-weight:700;font-size:18px">Rp 0</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:12px;display:flex;gap:12px;align-items:center">
+            <input id="searchInput" class="input" placeholder="Cari anggota..." />
+            <select id="sortSel" class="input small" style="width:180px">
+              <option value="name-asc">Nama A→Z</option>
+              <option value="name-desc">Nama Z→A</option>
+              <option value="balance-desc">Saldo tertinggi</option>
+              <option value="balance-asc">Saldo terendah</option>
+            </select>
+            <button class="btn ghost" id="btnClearAll">Reset Data</button>
+          </div>
+
+          <div class="list" style="margin-top:12px">
+            <table id="tblMembers">
+              <thead><tr><th>Nama</th><th>Saldo</th><th style="width:170px">Aksi</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <strong>Riwayat Transaksi (Terbaru)</strong>
+          <div class="list" style="margin-top:8px">
+            <table id="tblTrans">
+              <thead><tr><th>Waktu</th><th>Anggota</th><th>Jenis</th><th>Nominal</th><th style="width:80px">Aksi</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="aside">
+        <div class="card">
+          <strong>Panel Kontrol</strong>
+          <div class="muted small">Tambah / Kurangi saldo</div>
+          <div style="margin-top:10px">
+            <label class="small">Pilih Anggota</label>
+            <select id="selMember" class="input"></select>
+
+            <div style="margin-top:8px;display:flex;gap:8px">
+              <input id="inpAmount" class="input" placeholder="Nominal (mis. 50000)" />
+              <select id="selType" class="input" style="width:120px">
+                <option value="add">Tambah</option>
+                <option value="sub">Kurangi</option>
+              </select>
+            </div>
+
+            <div style="margin-top:8px;display:flex;gap:8px">
+              <button class="btn" id="btnApply">Proses</button>
+              <button class="btn ghost" id="btnRefresh">Refresh</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <strong>Grafik (7 hari terakhir)</strong>
+          <canvas id="chart" style="width:100%;height:220px;margin-top:8px"></canvas>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <strong>Tambah Anggota</strong>
+          <div style="margin-top:8px">
+            <input id="newName" class="input" placeholder="Nama anggota" />
+            <input id="newInit" class="input" style="margin-top:8px" placeholder="Saldo awal (kosong=0)" />
+            <div style="margin-top:8px;display:flex;gap:8px">
+              <button class="btn" id="btnAddMember">Tambah</button>
+              <button class="btn ghost" id="btnImportSample">Isi Contoh</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <footer>
+      <div class="muted">Aplikasi sederhana — data tersimpan di browser. Backup dengan tombol Export CSV.</div>
+    </footer>
+  </div>
+
+<script>
+/* ===== STORAGE KEY & UTIL ===== */
+const STORAGE_KEY = 'app_kas_v1';
+const defaultState = {members: [], transactions: []};
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return JSON.parse(JSON.stringify(defaultState));
+    return JSON.parse(raw);
+  }catch(e){ return JSON.parse(JSON.stringify(defaultState)); }
+}
+function saveState(s){ localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
+
+/* ===== APP STATE ===== */
+let state = loadState();
+
+/* ===== HELPERS ===== */
+function genId(prefix='id'){ return prefix + '_' + Math.random().toString(36).slice(2,9); }
+function formatRupiah(n){ return 'Rp ' + Number(n||0).toLocaleString('id-ID'); }
+function nowISO(){ return Date.now(); }
+
+/* ===== UI REFS ===== */
+const tblMembersBody = document.querySelector('#tblMembers tbody');
+const tblTransBody = document.querySelector('#tblTrans tbody');
+const selMember = document.getElementById('selMember');
+const kCount = document.getElementById('kCount');
+const kTotal = document.getElementById('kTotal');
+const searchInput = document.getElementById('searchInput');
+const sortSel = document.getElementById('sortSel');
+const themeSelect = document.getElementById('themeSelect');
+
+/* ===== INIT ===== */
+function init(){
+  // theme restore
+  const th = localStorage.getItem('app_theme') || 'dark';
+  setTheme(th);
+  themeSelect.value = th;
+
+  bindEvents();
+  renderAll();
+}
+function bindEvents(){
+  document.getElementById('btnAddMember').onclick = addMemberFromForm;
+  document.getElementById('btnAddMemberTop').onclick = ()=>{ document.getElementById('newName').focus(); window.scrollTo({top:0,behavior:'smooth'}) };
+  document.getElementById('btnApply').onclick = applyTransaction;
+  document.getElementById('btnRefresh').onclick = renderAll;
+  document.getElementById('btnExport').onclick = exportCSV;
+  document.getElementById('btnImport').onclick = importCSVPrompt;
+  document.getElementById('btnClearAll').onclick = resetDataConfirm;
+  document.getElementById('btnImportSample').onclick = importSample;
+  document.getElementById('searchInput').oninput = renderAll;
+  document.getElementById('sortSel').onchange = renderAll;
+  themeSelect.onchange = ()=>{ setTheme(themeSelect.value); };
+
+  // enable action via Enter
+  document.getElementById('newInit').addEventListener?.('keypress', e=>{ if(e.key==='Enter') addMemberFromForm(); });
+}
+function setTheme(t){
+  document.documentElement.classList.remove('light','soft');
+  if(t==='light') document.documentElement.classList.add('light');
+  if(t==='soft') document.documentElement.classList.add('soft');
+  localStorage.setItem('app_theme', t);
+}
+
+/* ===== MEMBERS ===== */
+function addMemberFromForm(){
+  const name = document.getElementById('newName').value.trim();
+  const init = parseInt(document.getElementById('newInit').value||0) || 0;
+  if(!name) return alert('Isi nama anggota');
+  const id = genId('m');
+  state.members.push({id,name,balance: init});
+  saveState(state); document.getElementById('newName').value=''; document.getElementById('newInit').value='';
+  renderAll();
+}
+function editMember(id){
+  const m = state.members.find(x=>x.id===id);
+  if(!m) return;
+  const newName = prompt('Nama anggota:', m.name);
+  if(newName===null) return;
+  m.name = newName.trim() || m.name;
+  saveState(state); renderAll();
+}
+function deleteMember(id){
+  if(!confirm('Hapus anggota dan seluruh transaksinya?')) return;
+  state.members = state.members.filter(x=>x.id!==id);
+  state.transactions = state.transactions.filter(t=>t.memberId!==id);
+  saveState(state); renderAll();
+}
+
+/* ===== TRANSACTIONS ===== */
+function applyTransaction(){
+  const memberId = selMember.value;
+  const amount = parseInt(document.getElementById('inpAmount').value||0);
+  const type = document.getElementById('selType').value;
+  if(!memberId) return alert('Pilih anggota');
+  if(!amount || amount<=0) return alert('Masukkan nominal yang benar');
+  const member = state.members.find(m=>m.id===memberId);
+  if(!member) return alert('Anggota tidak ditemukan');
+
+  const newBalance = type === 'add' ? (member.balance + amount) : (member.balance - amount);
+  // prevent negative? allow but warn
+  if(newBalance < 0){
+    if(!confirm('Saldo akan menjadi negatif. Lanjutkan?')) return;
+  }
+  member.balance = newBalance;
+  const tx = { id: genId('tx'), memberId, memberName: member.name, type, amount, time: nowISO() };
+  state.transactions.push(tx);
+  saveState(state);
+  document.getElementById('inpAmount').value = '';
+  renderAll();
+}
+
+/* ===== RENDER ===== */
+function renderAll(){
+  renderMembers();
+  renderTrans();
+  renderSelect();
+  renderKPIs();
+  renderChart();
+}
+
+function renderMembers(){
+  const q = searchInput.value.trim().toLowerCase();
+  let list = state.members.slice();
+  // sort
+  const s = sortSel.value;
+  if(s==='name-asc') list.sort((a,b)=>a.name.localeCompare(b.name));
+  if(s==='name-desc') list.sort((a,b)=>b.name.localeCompare(a.name));
+  if(s==='balance-desc') list.sort((a,b)=>b.balance - a.balance);
+  if(s==='balance-asc') list.sort((a,b)=>a.balance - b.balance);
+
+  // filter
+  if(q) list = list.filter(m => m.name.toLowerCase().includes(q));
+
+  tblMembersBody.innerHTML = '';
+  if(list.length===0) tblMembersBody.innerHTML = '<tr><td colspan="3" class="muted center">Belum ada anggota</td></tr>';
+  list.forEach(m=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${m.name}</td><td>${formatRupiah(m.balance)}</td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn ghost" data-id="${m.id}" data-act="select">Pilih</button>
+          <button class="btn ghost" data-id="${m.id}" data-act="edit">Edit</button>
+          <button class="btn" data-id="${m.id}" data-act="del">Hapus</button>
+        </div>
+      </td>`;
+    tblMembersBody.appendChild(tr);
+  });
+  // attach buttons
+  tblMembersBody.querySelectorAll('button').forEach(b=>{
+    b.onclick = ()=>{ const id=b.dataset.id, act=b.dataset.act;
+      if(act==='select'){ selMember.value = id; }
+      if(act==='edit') editMember(id);
+      if(act==='del') deleteMember(id);
+    };
+  });
+}
+
+function renderTrans(){
+  const rows = state.transactions.slice().sort((a,b)=>b.time - a.time);
+  tblTransBody.innerHTML = '';
+  if(rows.length===0) tblTransBody.innerHTML = '<tr><td colspan="5" class="muted center">Belum ada transaksi</td></tr>';
+  rows.slice(0,200).forEach(t=>{
+    const tr = document.createElement('tr');
+    const d = new Date(t.time);
+    const timeStr = d.toLocaleString();
+    tr.innerHTML = `<td class="small">${timeStr}</td><td>${t.memberName}</td><td class="small">${t.type}</td><td>${formatRupiah(t.amount)}</td>
+      <td><button class="btn ghost" data-id="${t.id}">Hapus</button></td>`;
+    tblTransBody.appendChild(tr);
+  });
+  // delete transaction
+  tblTransBody.querySelectorAll('button').forEach(b=>{
+    b.onclick = ()=>{ const id=b.dataset.id; if(!confirm('Hapus transaksi?')) return; state.transactions = state.transactions.filter(x=>x.id!==id); saveState(state); renderAll(); };
+  });
+}
+
+function renderSelect(){
+  selMember.innerHTML = '<option value="">-- pilih anggota --</option>';
+  state.members.forEach(m=>{
+    const o = document.createElement('option'); o.value = m.id; o.textContent = `${m.name} (${formatRupiah(m.balance)})`; selMember.appendChild(o);
+  });
+}
+
+function renderKPIs(){
+  kCount.textContent = state.members.length;
+  const total = state.members.reduce((s,m)=>s + Number(m.balance||0), 0);
+  kTotal.textContent = formatRupiah(total);
+}
+
+/* ===== CHART ===== */
+let chartInstance = null;
+function renderChart(){
+  const ctx = document.getElementById('chart');
+  const days = [];
+  for(let i=6;i>=0;i--){ const d = new Date(); d.setDate(d.getDate()-i); days.push(d.toISOString().slice(0,10)); }
+  const adds = days.map(()=>0), subs = days.map(()=>0);
+  state.transactions.forEach(t=>{
+    const day = new Date(t.time).toISOString().slice(0,10);
+    const idx = days.indexOf(day);
+    if(idx>=0){
+      if(t.type==='add') adds[idx]+=t.amount; else subs[idx]+=t.amount;
+    }
+  });
+  if(chartInstance) chartInstance.destroy();
+  chartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: days.map(d=>{ const x=new Date(d); return x.getDate() + '/' + (x.getMonth()+1); }),
+      datasets: [
+        {label:'Tambah', data:adds, stack:'s1'},
+        {label:'Kurangi', data:subs, stack:'s1'}
+      ]
+    },
+    options: {responsive:true, plugins:{legend:{position:'bottom'}}}
+  });
+}
+
+/* ===== EXPORT / IMPORT CSV ===== */
+function exportCSV(){
+  // members
+  const rowsM = [['id','name','balance'], ...state.members.map(m=>[m.id,m.name,m.balance])];
+  const rowsT = [['id','memberId','memberName','type','amount','time'], ...state.transactions.map(t=>[t.id,t.memberId,t.memberName,t.type,t.amount,t.time])];
+  downloadCSV(rowsM, 'members.csv');
+  downloadCSV(rowsT, 'transactions.csv');
+  alert('Export selesai: members.csv & transactions.csv dibuat (akan di-download).');
+}
+function downloadCSV(rows, filename){
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+function importCSVPrompt(){
+  const input = document.createElement('input'); input.type='file'; input.accept='.csv,text/csv';
+  input.onchange = (e) => {
+    const f = e.target.files[0]; if(!f) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target.result;
+      // try detect whether members or transactions by header
+      const lines = text.split(/\r?\n/).filter(l=>l.trim().length>0);
+      if(lines.length===0) return alert('File kosong');
+      const header = lines[0].split(',').map(h=>h.replace(/(^"|"$)/g,'').trim().toLowerCase());
+      if(header.includes('balance') && header.includes('name')){
+        // members
+        if(confirm('Import sebagai members? (akan menimpa existing jika id sama)')){
+          const data = lines.slice(1).map(l=>splitCSVLine(l)).map(cols=>({id:cols[0],name:cols[1],balance: Number(cols[2]||0)}));
+          // merge or append: if id exists replace, else append
+          const map = {}; state.members.forEach(m=>map[m.id]=m);
+          data.forEach(d=>map[d.id] = d);
+          state.members = Object.values(map);
+          saveState(state); renderAll(); alert('Import members selesai');
+        }
+      }else if(header.includes('amount') && header.includes('memberid')){
+        if(confirm('Import sebagai transactions?')){
+          const data = lines.slice(1).map(l=>splitCSVLine(l)).map(cols=>({id:cols[0],memberId:cols[1],memberName:cols[2],type:cols[3],amount:Number(cols[4]||0),time:Number(cols[5]||Date.now())}));
+          // append
+          state.transactions = state.transactions.concat(data);
+          saveState(state); renderAll(); alert('Import transactions selesai');
+        }
+      }else alert('Format file CSV tidak dikenali.');
+    };
+    reader.readAsText(f);
+  };
+  input.click();
+}
+function splitCSVLine(line){
+  // very simple CSV splitter for quoted values
+  const re = /("([^"]*(?:""[^"]*)*)"|[^,]+)/g;
+  const res = [];
+  let m;
+  while((m = re.exec(line)) !== null){
+    let v = m[1];
+    if(v.startsWith('"') && v.endsWith('"')) v = v.slice(1,-1).replace(/""/g,'"');
+    res.push(v);
+  }
+  return res;
+}
+
+/* ===== OTHER ACTIONS ===== */
+function resetDataConfirm(){
+  if(!confirm('Reset semua data? (tidak bisa dibatalkan)')) return;
+  state = {members:[], transactions:[]};
+  saveState(state); renderAll();
+}
+
+function importSample(){
+  state.members = [
+    {id:'m_a',name:'Siti',balance:50000},
+    {id:'m_b',name:'Budi',balance:30000},
+    {id:'m_c',name:'Ani',balance:15000}
+  ];
+  state.transactions = [
+    {id:'tx1',memberId:'m_a',memberName:'Siti',type:'add',amount:50000,time:Date.now()-86400000*3},
+    {id:'tx2',memberId:'m_b',memberName:'Budi',type:'add',amount:30000,time:Date.now()-86400000*2},
+    {id:'tx3',memberId:'m_c',memberName:'Ani',type:'add',amount:15000,time:Date.now()-86400000}
+  ];
+  saveState(state); renderAll();
+}
+
+/* ===== START ===== */
+init();
+
+/* For convenience: auto-save on unload (already saved on actions) */
+window.addEventListener('beforeunload', ()=> saveState(state) );
+</script>
+</body>
+</html>
 
