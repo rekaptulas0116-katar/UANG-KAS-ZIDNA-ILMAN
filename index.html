@@ -7,6 +7,8 @@
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- SheetJS (XLSX) untuk export .xlsx -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <style>
     :root{
@@ -72,7 +74,8 @@
             <option value="soft">Soft</option>
           </select>
           <button class="btn" id="btnAddMemberTop">Tambah Anggota</button>
-          <button class="btn ghost" id="btnExport">Export CSV</button>
+          <button class="btn ghost" id="btnExportCSV">Export CSV</button>
+          <button class="btn ghost" id="btnExportExcel">Export Laporan Excel</button>
           <button class="btn ghost" id="btnImport">Import CSV</button>
         </div>
       </div>
@@ -173,7 +176,7 @@
     </div>
 
     <footer>
-      <div class="muted">Aplikasi sederhana — data tersimpan di browser. Backup dengan tombol Export CSV.</div>
+      <div class="muted">Aplikasi sederhana — data tersimpan di browser. Backup dengan tombol Export CSV / Excel.</div>
     </footer>
   </div>
 
@@ -209,6 +212,12 @@ const searchInput = document.getElementById('searchInput');
 const sortSel = document.getElementById('sortSel');
 const themeSelect = document.getElementById('themeSelect');
 
+/* ===== MONTH LIST ===== */
+const months = [
+  "Januari","Februari","Maret","April","Mei","Juni",
+  "Juli","Agustus","September","Oktober","November","Desember"
+];
+
 /* ===== INIT ===== */
 function init(){
   // theme restore
@@ -224,7 +233,8 @@ function bindEvents(){
   document.getElementById('btnAddMemberTop').onclick = ()=>{ document.getElementById('newName').focus(); window.scrollTo({top:0,behavior:'smooth'}) };
   document.getElementById('btnApply').onclick = applyTransaction;
   document.getElementById('btnRefresh').onclick = renderAll;
-  document.getElementById('btnExport').onclick = exportCSV;
+  document.getElementById('btnExportCSV').onclick = exportCSV;
+  document.getElementById('btnExportExcel').onclick = exportLaporanExcel;
   document.getElementById('btnImport').onclick = importCSVPrompt;
   document.getElementById('btnClearAll').onclick = resetDataConfirm;
   document.getElementById('btnImportSample').onclick = importSample;
@@ -258,6 +268,8 @@ function editMember(id){
   const newName = prompt('Nama anggota:', m.name);
   if(newName===null) return;
   m.name = newName.trim() || m.name;
+  // update memberName in transactions too
+  state.transactions.forEach(tx=>{ if(tx.memberId===id) tx.memberName = m.name; });
   saveState(state); renderAll();
 }
 function deleteMember(id){
@@ -271,7 +283,7 @@ function deleteMember(id){
 function applyTransaction(){
   const memberId = selMember.value;
   const amount = parseInt(document.getElementById('inpAmount').value||0);
-  const type = document.getElementById('selType').value;
+  const type = document.getElementById('selType').value; // 'add' or 'sub'
   if(!memberId) return alert('Pilih anggota');
   if(!amount || amount<=0) return alert('Masukkan nominal yang benar');
   const member = state.members.find(m=>m.id===memberId);
@@ -457,6 +469,87 @@ function splitCSVLine(line){
   return res;
 }
 
+/* ===== EXPORT XLSX (LAPORAN BULANAN + DETAIL) ===== */
+function exportLaporanExcel(){
+  // Prepare rekap per member per month
+  // Structure: map memberId -> { name, months: [{masuk,keluar}, ...12], totalMasuk, totalKeluar, saldoAkhir }
+  const map = {};
+  state.members.forEach(m => {
+    map[m.id] = { name: m.name, months: Array.from({length:12},()=>({masuk:0,keluar:0})), totalMasuk:0, totalKeluar:0, saldoAkhir: Number(m.balance||0) };
+  });
+
+  // Aggregate from transactions
+  state.transactions.forEach(tx=>{
+    const mid = tx.memberId;
+    if(!map[mid]){
+      // member deleted? skip or include — we'll skip
+      return;
+    }
+    const d = new Date(Number(tx.time));
+    const mi = d.getMonth(); // 0..11
+    if(tx.type === 'add'){
+      map[mid].months[mi].masuk += Number(tx.amount||0);
+      map[mid].totalMasuk += Number(tx.amount||0);
+    } else {
+      // assume 'sub' or other = keluar
+      map[mid].months[mi].keluar += Number(tx.amount||0);
+      map[mid].totalKeluar += Number(tx.amount||0);
+    }
+  });
+
+  // Build sheet1: Rekap Tahunan
+  const header = ['Nama'];
+  months.forEach(m => {
+    header.push(m + ' (Masuk)');
+    header.push(m + ' (Keluar)');
+  });
+  header.push('Total Masuk');
+  header.push('Total Keluar');
+  header.push('Saldo Akhir');
+
+  const rows = [header];
+  Object.keys(map).forEach(id => {
+    const r = map[id];
+    const row = [r.name];
+    for(let i=0;i<12;i++){
+      row.push(r.months[i].masuk);
+      row.push(r.months[i].keluar);
+    }
+    row.push(r.totalMasuk);
+    row.push(r.totalKeluar);
+    row.push(r.saldoAkhir);
+    rows.push(row);
+  });
+
+  // Create worksheet and apply basic column widths
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:20}].concat(Array.from({length:12*2},()=>({wch:12}))).concat([{wch:14},{wch:14},{wch:14}]);
+
+  // Create sheet2: Detail Transaksi
+  const detailHeader = ['Tanggal','Nama Anggota','Jenis','Nominal','Waktu (ms)'];
+  const detailRows = [detailHeader];
+  // Sort transactions ascending by time for detail
+  const txs = state.transactions.slice().sort((a,b)=>a.time - b.time);
+  txs.forEach(t=>{
+    const d = new Date(Number(t.time));
+    const tanggal = d.toLocaleString();
+    detailRows.push([tanggal, t.memberName, t.type, Number(t.amount||0), Number(t.time||0)]);
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet(detailRows);
+  ws2['!cols'] = [{wch:22},{wch:20},{wch:12},{wch:12},{wch:18}];
+
+  // Workbook
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Rekap Tahunan');
+  XLSX.utils.book_append_sheet(wb, ws2, 'Detail Transaksi');
+
+  // Write file
+  const fname = `Laporan_Uang_Kas_PAUD_ZIDNA_ILMAN_${(new Date()).getFullYear()}.xlsx`;
+  XLSX.writeFile(wb, fname);
+
+  alert('Laporan Excel berhasil dibuat: ' + fname);
+}
+
 /* ===== OTHER ACTIONS ===== */
 function resetDataConfirm(){
   if(!confirm('Reset semua data? (tidak bisa dibatalkan)')) return;
@@ -471,9 +564,12 @@ function importSample(){
     {id:'m_c',name:'Ani',balance:15000}
   ];
   state.transactions = [
-    {id:'tx1',memberId:'m_a',memberName:'Siti',type:'add',amount:50000,time:Date.now()-86400000*3},
-    {id:'tx2',memberId:'m_b',memberName:'Budi',type:'add',amount:30000,time:Date.now()-86400000*2},
-    {id:'tx3',memberId:'m_c',memberName:'Ani',type:'add',amount:15000,time:Date.now()-86400000}
+    {id:'tx1',memberId:'m_a',memberName:'Siti',type:'add',amount:50000,time:Date.now()-86400000*90},
+    {id:'tx2',memberId:'m_b',memberName:'Budi',type:'add',amount:30000,time:Date.now()-86400000*40},
+    {id:'tx3',memberId:'m_c',memberName:'Ani',type:'add',amount:15000,time:Date.now()-86400000*10},
+    // some sample subs
+    {id:'tx4',memberId:'m_a',memberName:'Siti',type:'sub',amount:10000,time:Date.now()-86400000*30},
+    {id:'tx5',memberId:'m_b',memberName:'Budi',type:'sub',amount:5000,time:Date.now()-86400000*5}
   ];
   saveState(state); renderAll();
 }
@@ -486,4 +582,3 @@ window.addEventListener('beforeunload', ()=> saveState(state) );
 </script>
 </body>
 </html>
-
